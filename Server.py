@@ -15,6 +15,7 @@ import numpy as np
 
 app = Flask(__name__)
 
+#DB Connection String
 user = 'postgres'
 password = 'jkr124'
 host = 'localhost'
@@ -32,19 +33,21 @@ except :
     print("error")
 cur = conn.cursor(cursor_factory = RealDictCursor)
 
+#none json type
 def on_json_loading_failed_return_dict(e):
     return {}
 
+#access root'/'
 @app.route('/')
 def hello():
     print("hello")
     return jsonify("hello")
 
+#access signUp Page
 @app.route('/signUp',methods=['Post'])
 def sign_up():
-    print(request)
+    #parsing json form about user's info 
     payload = request.json
-    print(payload)
     id = 'abc125'
     weight = payload['weight']
     height = payload['height']
@@ -54,7 +57,6 @@ def sign_up():
     diseaseList = payload['diseaseList'] #array
     preferredList = payload['preferredList'] #array
     nonpreferredList = payload['nonpreferredList'] #array
-    #Kcal = height * height * if gender == 0 ? 22 : 21
     
     mul = 22
     G = 'Man'
@@ -69,14 +71,23 @@ def sign_up():
         Acmul = 35
     else :
         Acmul = 40
-    
+        
+    #Kcal = height * height * if gender == 0 ? 22 : 21
     recommKcal = height*height*mul*Acmul
+    
+    #insert user_info
     cur.execute("INSERT INTO user_info VALUES (%s, %s, %s, %s, %s, %s, %s);",(id,str(weight),str(height),str(age),G,str(activity),str(recommKcal)))
+    
+    #insert user_disease
     for disease in diseaseList :
         cur.execute("INSERT INTO user_Disease VALUES (nextval('seq'), %s,%s);",(id,str(disease)))
+        
+    #insert user_preferredList
     for prefer in preferredList :
         print(prefer)
         cur.execute("INSERT INTO user_prefer VALUES (nextval('seq'), %s,%s);",(id,prefer))
+        
+    #insert user_nonpreferredList
     for nonprefer in nonpreferredList :
         print(nonprefer)
         cur.execute("INSERT INTO user_prefer VALUES (nextval('seq'), %s,%s);",(id,nonprefer))
@@ -84,11 +95,13 @@ def sign_up():
     
     return jsonify(hello = 'world')
 
-
+#send food_info for user
 @app.route('/sendImg',methods=['Post']) #Model + diary
 def send_Img():
+    #time
     now = datetime.now()
     
+    #reqest image parsing
     imagefile = request.files['imagefile'].read()
     npimg = np.fromstring(imagefile,np.uint8)
     image = cv2.imdecode(npimg, cv2.IMREAD_UNCHANGED)
@@ -108,8 +121,9 @@ def send_Img():
     #conn.commit
     return jsonify(result)
 
+#server send user's info to client
 @app.route('/receiveInfo',methods=['Post'])
-def receive_info():
+def receive_info(): 
     results = []
     Dresults = []
     Presults = []
@@ -135,6 +149,7 @@ def receive_info():
     results.append(Nresults)
     return jsonify(results)
  
+#server send diary to client
 @app.route('/receiveDiary',methods=['Post'])
 def receive_Diary():
     nutrient = {'food_one_time':0,'food_kcal':0,'food_carbo':0,'food_protain':0,'food_fat':0,'food_sugar':0,'food_salt':0,'food_cholesterol':0,'food_fattyacid':0,'food_transfattyacid':0}
