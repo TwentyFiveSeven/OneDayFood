@@ -12,6 +12,7 @@ from decimal import Decimal
 import ipython_genutils
 import re,cv2
 import numpy as np
+import pred,food
 
 app = Flask(__name__)
 
@@ -41,14 +42,15 @@ def on_json_loading_failed_return_dict(e):
 @app.route('/')
 def hello():
     print("hello")
-    return jsonify("hello")
+    return jsonify(hello = 'world')
 
 #access signUp Page
 @app.route('/signUp',methods=['Post'])
 def sign_up():
     #parsing json form about user's info 
     payload = request.json
-    id = 'abc125'
+#     id = 'abc134'
+    id = payload['id']
     weight = payload['weight']
     height = payload['height']
     age = payload['age']
@@ -95,31 +97,52 @@ def sign_up():
     
     return jsonify(hello = 'world')
 
+
 #send food_info for user
 @app.route('/sendImg',methods=['Post']) #Model + diary
 def send_Img():
     #time
     now = datetime.now()
-    
+    id = 'abc123'
     #reqest image parsing
-    imagefile = request.files['imagefile'].read()
+    imagefile = request.files["imagefile"].read()
     npimg = np.fromstring(imagefile,np.uint8)
     image = cv2.imdecode(npimg, cv2.IMREAD_UNCHANGED)
-#     cv2.IMSHOW('adsf',imagefile)
-#     cv2.waitKey(0)
-    id = 'abc123'
-    value = "해물칼국수"
+    image = cv2.resize(image, dsize=(112, 112), interpolation=cv2.INTER_AREA)
+    try:
+        image = food.test(image)
+    except:
+        print("error")
+    x=0
+    y=0
+    x,y,_ = image.shape
+    print(x,y)
+    
+    #Food image -> Food name
+    array = pred.classification(image)
+    value = array[0]
     cur.execute("SELECT * FROM food_info where food_name ="+"'"+value+"'"+";")
     result = cur.fetchall()
+    
     print(result)
-     
+    
     #diary
     Inday = str(now.year)+"-"+str(now.month)+"-"+str(now.day)
     Intime = str(now.hour)+":"+str(now.minute)
-    cur.execute("INSERT INTO user_history VALUES (nextval('seq'), %s, %s, %s, %s);",(id,Inday,Intime,value))
-    
+    cur.execute("INSERT INTO user_history VALUES (nextval('seq'), %s, %s, %s, %s);",(id,Inday,Intime,value)) 
+    conn.commit()
+    result[0]['food_kcal'] = float(re.sub('[,]','',result[0]['food_kcal']))
+    result[0]['food_one_time'] = float(re.sub('[,]','',result[0]['food_one_time']))
+    result[0]['food_carbo'] = float(re.sub('[,]','',result[0]['food_carbo']))
+    result[0]['food_protein'] = float(re.sub('[,]','',result[0]['food_protein']))
+    result[0]['food_fat'] = float(re.sub('[,]','',result[0]['food_fat']))
+    result[0]['food_sugar'] = float(re.sub('[,]','',result[0]['food_sugar']))
+    result[0]['food_salt'] = float(re.sub('[,]','',result[0]['food_salt']))
+    result[0]['food_cholesterol'] = float(re.sub('[,]','',result[0]['food_cholesterol']))
+    result[0]['food_fattyacid'] = float(re.sub('[,]','',result[0]['food_fattyacid']))
+    result[0]['food_transfattyacid'] = float(re.sub('[,]','',result[0]['food_transfattyacid']))
     #conn.commit
-    return jsonify(result)
+    return jsonify(list = array, foodinfo = result[0])
 
 #server send user's info to client
 @app.route('/receiveInfo',methods=['Post'])
@@ -128,31 +151,48 @@ def receive_info():
     Dresults = []
     Presults = []
     Nresults = []
+    info = {'weight':0,'height':0,'age':0,'gender':0,'activity':0,'targetCalorie':0,
+                 'diseaseList':[],'preferredList':[],'nonpreferredList':[]}
+#     cur.execute("SELECT * FROM user_info where user_id = "+"'"+user_id+"'"+";")
     cur.execute("SELECT * FROM user_info where user_id = 'abc123';")
     Iresult = cur.fetchall()
-    Iresult = [Iresult]
+    for I in Iresult :
+        info['weight'] = float(I['weight'])
+        info['height'] = float(I['height'])
+        info['age'] = int(I['age'])
+        info['gender'] = int(I['gender'])
+        info['activity'] = int(I['activity'])
+        info['targetCalorie'] = float(I['recommkcal'])
+#     Iresult = [Iresult]
     results.append(Iresult)
+    
     cur.execute("SELECT (disease) FROM user_disease where user_id = 'abc123';")
     Dresult = cur.fetchall()
     for result in Dresult :
-        Dresults.append(result)
+        Dresults.append(int(result['disease']))
+    info['diseaseList'] = Dresults
+     
     cur.execute("SELECT (food) FROM user_prefer where user_id = 'abc123';")
     Presult = cur.fetchall()
     for result in Presult :
-        Presults.append(result)
+        Presults.append(result['food'])
+    info['preferredList'] = Presults
+    
     cur.execute("SELECT (food) FROM user_nonprefer where user_id = 'abc123';")
     Nresult = cur.fetchall()
     for result in Nresult :
-        Nresults.append(result)
-    results.append(Dresults)
-    results.append(Presults)
-    results.append(Nresults)
-    return jsonify(results)
- 
+        Nresults.append(result['food'])
+    info['nonpreferredList'] = Nresults
+    
+    return jsonify(person = info)
+
 #server send diary to client
 @app.route('/receiveDiary',methods=['Post'])
 def receive_Diary():
-    nutrient = {'food_one_time':0,'food_kcal':0,'food_carbo':0,'food_protain':0,'food_fat':0,'food_sugar':0,'food_salt':0,'food_cholesterol':0,'food_fattyacid':0,'food_transfattyacid':0}
+    #json form Dictionary
+    nutrient = {'food_one_time':0,'food_kcal':0,'food_carbo':0,'food_protein':0,'food_fat':0,
+                'food_sugar':0,'food_salt':0,'food_cholesterol':0,'food_fattyacid':0,'food_transfattyacid':0}
+    
     cur.execute("SELECT (recommkcal) FROM user_info where user_id = 'abc123';")
     temp = cur.fetchall()
     kcal = temp[0]['recommkcal']
@@ -161,32 +201,29 @@ def receive_Diary():
     temp = request.json
     receiveDay = temp['day']
     
-    cur.execute("SELECT * FROM user_history where user_id = 'abc123' and eat_date = "+"'"+receiveDay+"'"+";")
+    cur.execute("SELECT * FROM user_history,food_info where user_id = 'abc123' and eat_date = "+"'"+receiveDay+"'"+" and eat_food=food_name;")
     temp = cur.fetchall()
     result = temp
     for tmp in temp :
+        print(tmp)
         if tmp['eat_date'] == receiveDay :
             food = tmp['eat_food']
             cur.execute("SELECT * FROM food_info where food_name = "+"'"+food+"'"+";")
             tempK = cur.fetchall()
-            nutrient['food_kcal'] -= float(re.sub('[,]','',tempK[0]['food_kcal']))
-            nutrient['food_one_time'] += float(re.sub('[,]','',tempK[0]['food_one_time']))
-            nutrient['food_carbo'] += float(re.sub('[,]','',tempK[0]['food_carbo']))
-            nutrient['food_protain'] += float(re.sub('[,]','',tempK[0]['food_protain']))
-            nutrient['food_fat'] += float(re.sub('[,]','',tempK[0]['food_fat']))
-            nutrient['food_sugar'] += float(re.sub('[,]','',tempK[0]['food_sugar']))
-            nutrient['food_salt'] += float(re.sub('[,]','',tempK[0]['food_salt']))
-            nutrient['food_cholesterol'] += float(re.sub('[,]','',tempK[0]['food_cholesterol']))
-            nutrient['food_fattyacid'] += float(re.sub('[,]','',tempK[0]['food_fattyacid']))
-            nutrient['food_transfattyacid'] += float(re.sub('[,]','',tempK[0]['food_transfattyacid']))            
-    
-    ret = []
-    for rett in result :
-        ret.append(rett)
-    ret.append(nutrient)
-    
-    return jsonify(ret)
+            nutrient['food_kcal'] =round(nutrient['food_kcal'] - float(re.sub('[,]','',tempK[0]['food_kcal'])),2)
+            nutrient['food_one_time'] =round(nutrient['food_one_time'] + float(re.sub('[,]','',tempK[0]['food_one_time'])),2)
+            nutrient['food_carbo'] =round(nutrient['food_carbo'] + float(re.sub('[,]','',tempK[0]['food_carbo'])),2)
+            nutrient['food_protein'] =round(nutrient['food_protein'] + float(re.sub('[,]','',tempK[0]['food_protein'])),2)
+            nutrient['food_fat'] =round(nutrient['food_fat'] + float(re.sub('[,]','',tempK[0]['food_fat'])),2)
+            nutrient['food_sugar'] =round(nutrient['food_sugar'] + float(re.sub('[,]','',tempK[0]['food_sugar'])),2)
+            nutrient['food_salt'] =round(nutrient['food_salt'] + float(re.sub('[,]','',tempK[0]['food_salt'])),2)
+            nutrient['food_cholesterol'] =round(nutrient['food_cholesterol'] + float(re.sub('[,]','',tempK[0]['food_cholesterol'])),2)
+            nutrient['food_fattyacid'] =round(nutrient['food_fattyacid'] + float(re.sub('[,]','',tempK[0]['food_fattyacid'])),2)
+            nutrient['food_transfattyacid'] =round(nutrient['food_transfattyacid'] + float(re.sub('[,]','',tempK[0]['food_transfattyacid'])),2)            
+         
+    return jsonify(diary = result, value = nutrient)
 
 
+#host='0.0.0.0' -> external access
 if __name__ == '__main__':
     app.run(host='0.0.0.0', debug = True)
