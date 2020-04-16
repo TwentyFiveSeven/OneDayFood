@@ -13,6 +13,7 @@ import ipython_genutils
 import re,cv2
 import numpy as np
 import pred,food
+from konlpy.tag import Kkma
 
 app = Flask(__name__)
 
@@ -222,6 +223,37 @@ def receive_Diary():
             nutrient['food_transfattyacid'] =round(nutrient['food_transfattyacid'] + float(re.sub('[,]','',tempK[0]['food_transfattyacid'])),2)            
          
     return jsonify(diary = result, value = nutrient)
+
+@app.route('/findMenu',methods=['Post'])
+def find_Menu():
+    payload = request.json
+    payload = payload['text']
+    ret = {};
+#     divid = kkma.nouns(payload['text'])
+    for noun in payload :
+        cur.execute("SELECT * FROM food_info where food_name = "+"'"+noun+"'"+";")
+        temp = cur.fetchall()
+        if temp == None :
+            divid =kkma.nouns(noun);
+            fix = divid[len(divid)-1]
+            for several in divid :
+                if several == fix :
+                    continue;
+                cur.execute("SELECT * FROM food_info where food_name = "+"'"+several+fix+"'"+";")
+                temp = cur.fetchall()
+                if temp != None :
+                    break;
+                cur.execute("SELECT * FROM food_info where food_name = "+"'"+several+" "+fix+"'"+";")
+                temp = cur.fetchall()
+                if temp != None :
+                    break;
+            if temp == None :
+                cur.execute("SELECT * FROM food_info where food_name = "+"'%"+fix+"%'"+";")
+                temp = cur.fetchall()
+        if temp != None :
+            ret[noun] = temp
+    return jsonify(menu = ret)
+    
 
 
 #host='0.0.0.0' -> external access
