@@ -14,6 +14,7 @@ import re,cv2
 import numpy as np
 import pred,food
 from konlpy.tag import Kkma
+from konlpy.tag import Okt
 
 app = Flask(__name__)
 
@@ -229,12 +230,13 @@ def find_Menu():
     payload = request.json
     payload = payload['text']
     ret = {};
+    okt = Okt();
 #     divid = kkma.nouns(payload['text'])
     for noun in payload :
         cur.execute("SELECT * FROM food_info where food_name = "+"'"+noun+"'"+";")
         temp = cur.fetchall()
         if temp == None :
-            divid =kkma.nouns(noun);
+            divid =okt.nouns(noun);
             fix = divid[len(divid)-1]
             for several in divid :
                 if several == fix :
